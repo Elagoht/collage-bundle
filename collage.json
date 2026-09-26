@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Elagoht/collage-snippets-highlighter/main/schemas/collage-plugin-manifest.schema.json",
+  "name": "elagoht/bundle",
+  "description": "A collage plugin that bundles an application's JavaScript, TypeScript and CSS with esbuild, and serves the output under content-hashed names.",
+  "repository": "https://github.com/Elagoht/collage-bundle",
+  "templateFunctions": [
+    {
+      "name": "bundle",
+      "signature": "bundle \"name\"",
+      "insert": "bundle \"${1:app.js}\"",
+      "doc": "The content-hashed URL of a bundle esbuild built: `<script src=\"{{bundle \"app.js\"}}\" defer>`."
+    }
+  ],
+  "snippets": {
+    "collage-bundle script": {
+      "language": "html",
+      "prefix": "cbundle",
+      "body": [
+        "<script src=\"{{bundle \"${1:app.js}\"}}\" defer></script>"
+      ],
+      "description": "collage-bundle: a script esbuild bundled"
+    }
+  },
+  "config": {
+    "type": "object",
+    "description": "A collage plugin that bundles an application's JavaScript, TypeScript and CSS with esbuild, and serves the output under content-hashed names.",
+    "properties": {
+      "dir": {
+        "type": "string",
+        "description": "Dir is the directory the sources are in, relative to the working directory: \"assets\". Required."
+      },
+      "entries": {
+        "type": "array",
+        "description": "Entries are the files to bundle, relative to Dir: \"app.ts\", \"app.css\". Each is bundled with everything it imports. Required.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "minify": {
+        "type": "boolean",
+        "description": "Minify minifies the output. Default: on, except in development."
+      },
+      "prefix": {
+        "type": "string",
+        "description": "Prefix is the URL prefix the output is served under. Default \"/_bundle/\"."
+      },
+      "sourcemap": {
+        "type": "boolean",
+        "description": "Sourcemap writes a source map beside each script and stylesheet, and links it. Default: on in development only."
+      },
+      "target": {
+        "type": "string",
+        "description": "Target is the language level the output must run on: \"es2018\", \"es2020\", \"esnext\". Default \"esnext\", which leaves the syntax as it was written."
+      }
+    }
+  }
+}

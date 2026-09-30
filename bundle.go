@@ -98,7 +98,7 @@ type Plugin struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.1.1" }
+func (p *Plugin) Version() string { return "0.1.2" }
 
 // Shutdown releases esbuild's build context, which a development server keeps
 // for its rebuilds.

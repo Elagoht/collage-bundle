@@ -52,6 +52,7 @@
         "type": "string",
         "description": "Target is the language level the output must run on: \"es2018\", \"es2020\", \"esnext\". Default \"esnext\", which leaves the syntax as it was written."
       }
-    }
+    },
+    "additionalProperties": false
   }
 }

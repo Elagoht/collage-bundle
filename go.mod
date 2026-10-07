@@ -11,3 +11,5 @@ require (
 	github.com/evanw/esbuild v0.28.2
 	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
 )
+
+retract v0.1.3 // tagged by mistake on the previous release's code; use v0.1.4 or later

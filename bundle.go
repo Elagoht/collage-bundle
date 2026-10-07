@@ -98,7 +98,7 @@ type Plugin struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.1.2" }
+func (p *Plugin) Version() string { return "0.1.3" }
 
 // Shutdown releases esbuild's build context, which a development server keeps
 // for its rebuilds.
@@ -137,9 +137,11 @@ var sourceExts = map[string]string{
 // itself waits for Init: a template function has to exist before templates are
 // parsed, but nothing needs the bundle before the application starts.
 func (p *Plugin) Configure(_ context.Context, host collage.ConfigHost) error {
-	if err := host.Config(&p.opts); err != nil {
+	cfg, err := collage.PluginConfig(host, p.opts)
+	if err != nil {
 		return err
 	}
+	p.opts = cfg
 	p.dev = host.DevMode()
 	p.logger = host.Logger()
 	if err := p.check(); err != nil {

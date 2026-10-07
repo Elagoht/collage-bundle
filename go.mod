@@ -5,7 +5,7 @@ module github.com/Elagoht/collage-bundle
 
 go 1.26
 
-require github.com/Elagoht/collage v0.23.0
+require github.com/Elagoht/collage v0.50.0
 
 require (
 	github.com/evanw/esbuild v0.28.2

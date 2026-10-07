@@ -18,7 +18,7 @@ app, err := collage.New(&collage.Config{
 <script src="{{bundle "app.js"}}" defer></script>
 ```
 
-Requires collage v0.23.0 or later. Register it in `Config.Plugins`: it adds a
+Requires collage v0.50.0 or later. Register it in `Config.Plugins`: it adds a
 template function, which only a plugin registered there can.
 
 ## What it does

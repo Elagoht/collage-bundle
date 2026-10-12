@@ -39,7 +39,12 @@
       },
       "minify": {
         "type": "string",
-        "description": "Minify is when the output is minified: \"\" (the default) outside development only, \"always\", or \"never\"."
+        "description": "Minify is when the output is minified: \"\" (the default) outside development only, \"always\", or \"never\".",
+        "enum": [
+          "",
+          "always",
+          "never"
+        ]
       },
       "prefix": {
         "type": "string",
@@ -47,7 +52,12 @@
       },
       "sourcemap": {
         "type": "string",
-        "description": "Sourcemap is when a source map is written beside each script and stylesheet, and linked: \"\" (the default) in development only, \"always\", or \"never\"."
+        "description": "Sourcemap is when a source map is written beside each script and stylesheet, and linked: \"\" (the default) in development only, \"always\", or \"never\".",
+        "enum": [
+          "",
+          "always",
+          "never"
+        ]
       },
       "target": {
         "type": "string",

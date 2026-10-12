@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -283,31 +282,23 @@ func TestDevelopmentMountSeesEdits(t *testing.T) {
 	p := bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.js"}})
 	a := app(t, true, `<script src="{{bundle "app.js"}}"></script>`, p)
 	defer p.Shutdown(context.Background())
-	a.Handler()
-	var fsys fs.FS
-	for _, m := range a.Mounts() {
-		if m.Prefix() == "/_bundle/" {
-			fsys = m.FS()
+	h := a.Handler()
+	script := func() (string, *httptest.ResponseRecorder) {
+		t.Helper()
+		urls := links(t, get(h, "/").Body.String())
+		if len(urls) != 1 {
+			t.Fatalf("links = %v", urls)
 		}
+		return urls[0], get(h, urls[0])
 	}
-	if fsys == nil {
-		t.Fatal("no mount at /_bundle/")
+	before, rec := script()
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "one") {
+		t.Fatalf("the mount at /_bundle/ does not serve %s: %d %q", before, rec.Code, rec.Body.String())
 	}
-	names := func() string {
-		var out []string
-		err := fs.WalkDir(fsys, ".", func(name string, d fs.DirEntry, err error) error {
-			out = append(out, name)
-			return err
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return strings.Join(out, ",")
-	}
-	before := names()
 	write(t, filepath.Join(dir, "app.js"), "console.log('two, longer')\n")
-	if after := names(); after == before {
-		t.Errorf("the mount did not change after an edit: %v", after)
+	after, rec := script()
+	if after == before || rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "two, longer") {
+		t.Errorf("the mount did not change after an edit: %s %d %q", after, rec.Code, rec.Body.String())
 	}
 }
 
@@ -317,11 +308,7 @@ func TestStaticBuild(t *testing.T) {
 	dir := sources(t, map[string]string{"app.ts": "console.log('built')\n", "app.css": "p{color:red}\n"})
 	a := app(t, false, layout, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts", "app.css"}}))
 	out := t.TempDir()
-	b, err := collage.NewBuilder(a, collage.BuildOptions{OutDir: out})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.Build(context.Background()); err != nil {
+	if _, err := collage.Build(context.Background(), a, collage.BuildOptions{OutDir: out}); err != nil {
 		t.Fatal(err)
 	}
 	html, err := os.ReadFile(filepath.Join(out, "index.html"))

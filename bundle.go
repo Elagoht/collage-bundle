@@ -64,17 +64,31 @@ type Options struct {
 	// Prefix is the URL prefix the output is served under, with or without its
 	// trailing slash. Default "/_bundle/".
 	Prefix string `json:"prefix"`
-	// Minify is when the output is minified: "" (the default) outside
-	// development only, "always", or "never".
-	Minify string `json:"minify"`
+	// Minify is when the output is minified: "" (ModeDefault) outside
+	// development only, "always" (ModeAlways), or "never" (ModeNever).
+	Minify Mode `json:"minify"`
 	// Sourcemap is when a source map is written beside each script and
-	// stylesheet, and linked: "" (the default) in development only, "always",
-	// or "never".
-	Sourcemap string `json:"sourcemap"`
+	// stylesheet, and linked: "" (ModeDefault) in development only, "always"
+	// (ModeAlways), or "never" (ModeNever).
+	Sourcemap Mode `json:"sourcemap"`
 	// Target is the language level the output must run on: "es2018", "es2020",
 	// "esnext". Default "esnext", which leaves the syntax as it was written.
 	Target string `json:"target"`
 }
+
+// Mode says when a setting with a development default applies: Minify is on
+// outside development by default, Sourcemap in development. In configuration it
+// is "", "always" or "never".
+type Mode string
+
+const (
+	// ModeDefault follows development vs production: the setting's own default.
+	ModeDefault Mode = ""
+	// ModeAlways turns the setting on, in development and production alike.
+	ModeAlways Mode = "always"
+	// ModeNever turns the setting off, in development and production alike.
+	ModeNever Mode = "never"
+)
 
 // Plugin builds and serves the bundle.
 type Plugin struct {
@@ -154,14 +168,15 @@ func (p *Plugin) Configure(_ context.Context, host collage.ConfigHost) error {
 	return host.AddTemplateFunc("bundle", p.URL)
 }
 
-// when reads a mode key: "" is byDefault, "always" true, "never" false.
-func when(key, mode string, byDefault bool) (bool, error) {
+// when reads a mode key: ModeDefault is byDefault, ModeAlways true, ModeNever
+// false.
+func when(key string, mode Mode, byDefault bool) (bool, error) {
 	switch mode {
-	case "":
+	case ModeDefault:
 		return byDefault, nil
-	case "always":
+	case ModeAlways:
 		return true, nil
-	case "never":
+	case ModeNever:
 		return false, nil
 	}
 	return false, fmt.Errorf("bundle: %s %q is none of \"\", \"always\", \"never\"", key, mode)

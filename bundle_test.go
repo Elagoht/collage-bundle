@@ -330,15 +330,30 @@ func TestConfiguration(t *testing.T) {
 // is written and linked, and the output is minified in development.
 func TestModesAlways(t *testing.T) {
 	dir := sources(t, map[string]string{"app.ts": "const long_name_here: number = 1\nconsole.log(long_name_here)\n"})
-	prod := app(t, false, `<script src="{{bundle "app.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}, Sourcemap: "always"}))
+	prod := app(t, false, `<script src="{{bundle "app.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}, Sourcemap: bundle.ModeAlways}))
 	body := prod.Get(links(t, prod.Get("/").Body)[0]).Body
 	if !strings.Contains(body, "sourceMappingURL=") {
 		t.Errorf("sourcemap always wrote no map in production: %q", body)
 	}
-	dev := app(t, true, `<script src="{{bundle "app.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}, Minify: "always", Sourcemap: "never"}))
+	dev := app(t, true, `<script src="{{bundle "app.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}, Minify: bundle.ModeAlways, Sourcemap: bundle.ModeNever}))
 	body = dev.Get(links(t, dev.Get("/").Body)[0]).Body
 	if strings.Contains(body, "long_name_here") || strings.Contains(body, "sourceMappingURL=") {
 		t.Errorf("minify always / sourcemap never were not applied in development: %q", body)
+	}
+}
+
+// A mode that is none of "", "always" and "never" stops the application, from
+// configuration as from Go.
+func TestInvalidModeFromConfigFails(t *testing.T) {
+	dir := sources(t, map[string]string{"app.ts": "console.log(1)\n"})
+	for _, key := range []string{"minify", "sourcemap"} {
+		t.Run(key, func(t *testing.T) {
+			_, err := collagetest.TrySite(t, append(siteOptions(false, `x`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}})),
+				collagetest.WithPluginConfig(bundle.Name, `{"`+key+`": "sometimes"}`))...)
+			if err == nil || !strings.Contains(err.Error(), "bundle: "+key) {
+				t.Errorf("start = %v, want a bundle error naming %s", err, key)
+			}
+		})
 	}
 }
 

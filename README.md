@@ -78,9 +78,20 @@ browser's developer tools show the sources as written.
 | `Dir` | required | The directory the sources are in, relative to the working directory |
 | `Entries` | required | The files to bundle, relative to `Dir`: `.js`, `.mjs`, `.jsx`, `.ts`, `.tsx`, `.css` and the like |
 | `Prefix` | `/_bundle/` | The URL prefix the output is served under; the trailing `/` is optional |
-| `Minify` | `""`: outside development only | When to minify whitespace, identifiers and syntax: `""`, `"always"` or `"never"` |
-| `Sourcemap` | `""`: in development only | When to write and link a source map beside each output: `""`, `"always"` or `"never"` |
+| `Minify` | `""`: outside development only | When to minify whitespace, identifiers and syntax: a `bundle.Mode` |
+| `Sourcemap` | `""`: in development only | When to write and link a source map beside each output: a `bundle.Mode` |
 | `Target` | `esnext` | The language level the output must run on: `es2015` to `es2025`, `esnext` |
+
+A `bundle.Mode` is `""` (`bundle.ModeDefault`, which follows development vs
+production), `"always"` (`bundle.ModeAlways`) or `"never"` (`bundle.ModeNever`):
+
+```go
+bundle.New(bundle.Options{
+	Dir:       "assets",
+	Entries:   []string{"app.ts"},
+	Sourcemap: bundle.ModeAlways, // maps in production too
+})
+```
 
 Startup is refused for a `Dir` that is not a directory, an entry that is not a
 file in it or escapes it, an entry that is not a script or a stylesheet, two
@@ -125,8 +136,8 @@ or `Minify`/`Sourcemap` mode, and a `Prefix` that does not begin with `/` or is
 
 | Was | Now |
 | --- | --- |
-| `minify: true` / `false` (`Options.Minify *bool`) | `minify: "always"` / `"never"` (`Options.Minify string`); leave it out for the default |
-| `sourcemap: true` / `false` (`Options.Sourcemap *bool`) | `sourcemap: "always"` / `"never"` (`Options.Sourcemap string`) |
+| `minify: true` / `false` (`Options.Minify *bool`) | `minify: "always"` / `"never"` (`Options.Minify bundle.Mode`: `bundle.ModeAlways` / `bundle.ModeNever`); leave it out for the default |
+| `sourcemap: true` / `false` (`Options.Sourcemap *bool`) | `sourcemap: "always"` / `"never"` (`Options.Sourcemap bundle.Mode`) |
 | `prefix` had to end in `/` | the trailing `/` is optional |
 
 A boolean `minify` or `sourcemap` now stops the application at start, naming the

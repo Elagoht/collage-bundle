@@ -61,13 +61,16 @@ type Options struct {
 	// Entries are the files to bundle, relative to Dir: "app.ts", "app.css".
 	// Each is bundled with everything it imports. Required.
 	Entries []string `json:"entries"`
-	// Prefix is the URL prefix the output is served under. Default "/_bundle/".
+	// Prefix is the URL prefix the output is served under, with or without its
+	// trailing slash. Default "/_bundle/".
 	Prefix string `json:"prefix"`
-	// Minify minifies the output. Default: on, except in development.
-	Minify *bool `json:"minify"`
-	// Sourcemap writes a source map beside each script and stylesheet, and links
-	// it. Default: on in development only.
-	Sourcemap *bool `json:"sourcemap"`
+	// Minify is when the output is minified: "" (the default) outside
+	// development only, "always", or "never".
+	Minify string `json:"minify"`
+	// Sourcemap is when a source map is written beside each script and
+	// stylesheet, and linked: "" (the default) in development only, "always",
+	// or "never".
+	Sourcemap string `json:"sourcemap"`
 	// Target is the language level the output must run on: "es2018", "es2020",
 	// "esnext". Default "esnext", which leaves the syntax as it was written.
 	Target string `json:"target"`
@@ -98,7 +101,7 @@ type Plugin struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.1.6" }
+func (p *Plugin) Version() string { return "0.2.0" }
 
 // Shutdown releases esbuild's build context, which a development server keeps
 // for its rebuilds.
@@ -151,6 +154,19 @@ func (p *Plugin) Configure(_ context.Context, host collage.ConfigHost) error {
 	return host.AddTemplateFunc("bundle", p.URL)
 }
 
+// when reads a mode key: "" is byDefault, "always" true, "never" false.
+func when(key, mode string, byDefault bool) (bool, error) {
+	switch mode {
+	case "":
+		return byDefault, nil
+	case "always":
+		return true, nil
+	case "never":
+		return false, nil
+	}
+	return false, fmt.Errorf("bundle: %s %q is none of \"\", \"always\", \"never\"", key, mode)
+}
+
 func (p *Plugin) check() error {
 	o := &p.opts
 	if o.Dir == "" {
@@ -191,16 +207,17 @@ func (p *Plugin) check() error {
 	if o.Prefix == "" {
 		o.Prefix = "/_bundle/"
 	}
-	if !strings.HasPrefix(o.Prefix, "/") || !strings.HasSuffix(o.Prefix, "/") || o.Prefix == "/" {
-		return fmt.Errorf("bundle: Prefix %q must begin and end with / and not be / alone", o.Prefix)
+	if !strings.HasSuffix(o.Prefix, "/") {
+		o.Prefix += "/"
 	}
-	p.minify = !p.dev
-	if o.Minify != nil {
-		p.minify = *o.Minify
+	if !strings.HasPrefix(o.Prefix, "/") || o.Prefix == "/" {
+		return fmt.Errorf("bundle: prefix %q must begin with / and not be / alone", o.Prefix)
 	}
-	p.maps = p.dev
-	if o.Sourcemap != nil {
-		p.maps = *o.Sourcemap
+	if p.minify, err = when("minify", o.Minify, !p.dev); err != nil {
+		return err
+	}
+	if p.maps, err = when("sourcemap", o.Sourcemap, p.dev); err != nil {
+		return err
 	}
 	target := strings.ToLower(o.Target)
 	if target == "" {

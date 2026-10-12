@@ -1,10 +1,8 @@
 package bundle_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -13,11 +11,11 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	bundle "github.com/Elagoht/collage-bundle"
 	"github.com/Elagoht/collage/pkg/collage"
+	"github.com/Elagoht/collage/pkg/collagetest"
 )
 
 // sources writes files into a fresh directory and returns it.
@@ -49,22 +47,22 @@ func write(t *testing.T, file, content string) {
 const layout = `<html><head><link rel="stylesheet" href="{{bundle "app.css"}}"></head>` +
 	`<body><script src="{{bundle "app.js"}}"></script></body></html>`
 
-func app(t *testing.T, dev bool, tmpl string, p *bundle.Plugin) *collage.App {
+// app starts an application whose page / is tmpl, with p, in development when
+// dev is set.
+func app(t *testing.T, dev bool, tmpl string, p *bundle.Plugin, more ...collagetest.SiteOption) *collagetest.Site {
 	t.Helper()
-	a, err := collage.New(&collage.Config{
-		Server:   collage.ServerConfig{Host: "localhost", Port: 3000},
-		DevMode:  dev,
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Template: collage.TemplateConfig{FS: fstest.MapFS{"t/p.html": {Data: []byte(tmpl)}}, Root: "t"},
-		Plugins:  []collage.Plugin{p},
-	})
-	if err != nil {
-		t.Fatal(err)
+	return collagetest.NewSite(t, append(siteOptions(dev, tmpl, p), more...)...)
+}
+
+// siteOptions is what app builds, for a test that expects it not to start.
+func siteOptions(dev bool, tmpl string, p *bundle.Plugin) []collagetest.SiteOption {
+	return []collagetest.SiteOption{
+		collagetest.WithPlugins(p),
+		collagetest.WithoutHome(),
+		collagetest.WithTemplates(map[string]string{"p.html": tmpl}),
+		collagetest.WithRegister(collage.NewPage("home").WithContent(collage.NewFragment("home", "p.html").Build()).WithPath("en", "/").Static().Build()),
+		collagetest.WithConfig(func(c *collage.Config) { c.DevMode = dev }),
 	}
-	if err := a.RegisterPage(collage.NewPage("home").WithContent(collage.NewFragment("home", "p.html").Build()).WithPath("en", "/").Static().Build()); err != nil {
-		t.Fatal(err)
-	}
-	return a
 }
 
 func get(h http.Handler, path string) *httptest.ResponseRecorder {
@@ -93,7 +91,7 @@ func TestBuildsAndServesHashedNames(t *testing.T) {
 		"base.css":  "body { margin: 0 }\n",
 		"notes.txt": "not an entry",
 	})
-	h := app(t, false, layout, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts", "app.css"}})).Handler()
+	h := app(t, false, layout, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts", "app.css"}})).App.Handler()
 	page := get(h, "/")
 	if page.Code != http.StatusOK {
 		t.Fatalf("page = %d %s", page.Code, page.Body)
@@ -135,7 +133,7 @@ func TestEntryNamesAndImportedCSS(t *testing.T) {
 		"js/main.css": ".b { color: blue }\n",
 	})
 	tmpl := `<link href="{{bundle "js/main.css"}}"><script src="{{bundle "js/main.tsx"}}"></script>`
-	h := app(t, false, tmpl, bundle.New(bundle.Options{Dir: dir, Entries: []string{"js/main.tsx"}})).Handler()
+	h := app(t, false, tmpl, bundle.New(bundle.Options{Dir: dir, Entries: []string{"js/main.tsx"}})).App.Handler()
 	urls := links(t, get(h, "/").Body.String())
 	if len(urls) != 2 || !strings.HasPrefix(urls[0], "/_bundle/js/main-") || !strings.HasSuffix(urls[0], ".css") ||
 		!strings.HasSuffix(urls[1], ".js") {
@@ -154,7 +152,7 @@ func TestReferencedFiles(t *testing.T) {
 		"dot.png":   "\x89PNG fake",
 		"unused.js": "x",
 	})
-	h := app(t, false, `<link href="{{bundle "app.css"}}">`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.css"}})).Handler()
+	h := app(t, false, `<link href="{{bundle "app.css"}}">`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.css"}})).App.Handler()
 	css := get(h, links(t, get(h, "/").Body.String())[0]).Body.String()
 	m := regexp.MustCompile(`url\("?(/_bundle/assets/dot-[A-Z0-9]+\.png)"?\)`).FindStringSubmatch(css)
 	if m == nil {
@@ -167,7 +165,7 @@ func TestReferencedFiles(t *testing.T) {
 
 func TestUnknownNameFailsTheRender(t *testing.T) {
 	dir := sources(t, map[string]string{"app.js": "console.log(1)\n"})
-	h := app(t, false, `<script src="{{bundle "nope.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.js"}})).Handler()
+	h := app(t, false, `<script src="{{bundle "nope.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.js"}})).App.Handler()
 	if rec := get(h, "/"); rec.Code != http.StatusInternalServerError {
 		t.Errorf("page = %d, want 500", rec.Code)
 	}
@@ -189,20 +187,14 @@ func TestRefusals(t *testing.T) {
 		"not a source":    {Dir: good, Entries: []string{"readme.md"}},
 		"same output":     {Dir: good, Entries: []string{"app.ts", "app.js"}},
 		"bad target":      {Dir: good, Entries: []string{"app.ts"}, Target: "es3"},
-		"bad prefix":      {Dir: good, Entries: []string{"app.ts"}, Prefix: "bundle"},
+		"bad prefix":      {Dir: good, Entries: []string{"app.ts"}, Prefix: "bundle/"},
+		"root prefix":     {Dir: good, Entries: []string{"app.ts"}, Prefix: "/"},
+		"bad minify":      {Dir: good, Entries: []string{"app.ts"}, Minify: "yes"},
+		"bad sourcemap":   {Dir: good, Entries: []string{"app.ts"}, Sourcemap: "on"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			a, err := collage.New(&collage.Config{
-				Server:   collage.ServerConfig{Host: "localhost", Port: 3000},
-				Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-				Template: collage.TemplateConfig{FS: fstest.MapFS{"t/p.html": {Data: []byte(`x`)}}, Root: "t"},
-				Plugins:  []collage.Plugin{bundle.New(opts)},
-			})
-			if err != nil {
-				return // refused already, in Configure
-			}
-			if rec := get(a.Handler(), "/"); rec.Code != http.StatusServiceUnavailable {
-				t.Errorf("started anyway: %d", rec.Code)
+			if _, err := collagetest.TrySite(t, siteOptions(false, `x`, bundle.New(opts))...); err == nil {
+				t.Error("started anyway")
 			}
 		})
 	}
@@ -212,23 +204,9 @@ func TestRefusals(t *testing.T) {
 // rather than fatal, and an edit is rebuilt before the next render.
 func TestDevelopment(t *testing.T) {
 	dir := sources(t, map[string]string{"app.ts": "const who: string = 'first'\nconsole.log(who)\n"})
-	var logged bytes.Buffer
 	p := bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}})
-	a, err := collage.New(&collage.Config{
-		Server:   collage.ServerConfig{Host: "localhost", Port: 3000},
-		DevMode:  true,
-		Logger:   slog.New(slog.NewTextHandler(&logged, nil)),
-		Template: collage.TemplateConfig{FS: fstest.MapFS{"t/p.html": {Data: []byte(`<script src="{{bundle "app.js"}}"></script>`)}}, Root: "t"},
-		Plugins:  []collage.Plugin{p},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := a.RegisterPage(collage.NewPage("home").WithContent(collage.NewFragment("home", "p.html").Build()).WithPath("en", "/").Build()); err != nil {
-		t.Fatal(err)
-	}
-	defer p.Shutdown(context.Background())
-	h := a.Handler()
+	a := app(t, true, `<script src="{{bundle "app.js"}}"></script>`, p)
+	h := a.App.Handler()
 
 	script := func() (string, *httptest.ResponseRecorder) {
 		t.Helper()
@@ -261,8 +239,8 @@ func TestDevelopment(t *testing.T) {
 		!strings.Contains(rec.Body.String(), "build failed") {
 		t.Errorf("a build error is served as %s %d %q", broken, rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(logged.String(), "the build failed") {
-		t.Errorf("the build error was not logged: %s", logged.String())
+	if !a.Logs.Has(slog.LevelError, "the build failed") {
+		t.Errorf("the build error was not logged: %s", a.Logs.String())
 	}
 
 	write(t, filepath.Join(dir, "app.ts"), "const who: string = 'second, fixed'\nconsole.log(who)\n")
@@ -280,9 +258,7 @@ func TestDevelopment(t *testing.T) {
 func TestDevelopmentMountSeesEdits(t *testing.T) {
 	dir := sources(t, map[string]string{"app.js": "console.log('one')\n"})
 	p := bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.js"}})
-	a := app(t, true, `<script src="{{bundle "app.js"}}"></script>`, p)
-	defer p.Shutdown(context.Background())
-	h := a.Handler()
+	h := app(t, true, `<script src="{{bundle "app.js"}}"></script>`, p).App.Handler()
 	script := func() (string, *httptest.ResponseRecorder) {
 		t.Helper()
 		urls := links(t, get(h, "/").Body.String())
@@ -308,7 +284,7 @@ func TestStaticBuild(t *testing.T) {
 	dir := sources(t, map[string]string{"app.ts": "console.log('built')\n", "app.css": "p{color:red}\n"})
 	a := app(t, false, layout, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts", "app.css"}}))
 	out := t.TempDir()
-	if _, err := collage.Build(context.Background(), a, collage.BuildOptions{OutDir: out}); err != nil {
+	if _, err := collage.Build(context.Background(), a.App, collage.BuildOptions{OutDir: out}); err != nil {
 		t.Fatal(err)
 	}
 	html, err := os.ReadFile(filepath.Join(out, "index.html"))
@@ -331,32 +307,66 @@ func TestConfiguration(t *testing.T) {
 	dir := sources(t, map[string]string{"app.ts": "const long_name_here: number = 1\nconsole.log(long_name_here)\n"})
 	conf, err := json.Marshal(struct {
 		Dir    string `json:"dir"`
-		Minify bool   `json:"minify"`
+		Minify string `json:"minify"`
 		Prefix string `json:"prefix"`
 		Target string `json:"target"`
-	}{dir, false, "/js/", "es2015"})
+	}{dir, "never", "/js/", "es2015"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := collage.New(&collage.Config{
-		Server:       collage.ServerConfig{Host: "localhost", Port: 3000},
-		Template:     collage.TemplateConfig{FS: fstest.MapFS{"t/p.html": {Data: []byte(`<script src="{{bundle "app.js"}}"></script>`)}}, Root: "t"},
-		Plugins:      []collage.Plugin{bundle.New(bundle.Options{Entries: []string{"app.ts"}})},
-		PluginConfig: map[string]json.RawMessage{bundle.Name: conf},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := a.RegisterPage(collage.NewPage("home").WithContent(collage.NewFragment("home", "p.html").Build()).WithPath("en", "/").Build()); err != nil {
-		t.Fatal(err)
-	}
-	h := a.Handler()
-	m := regexp.MustCompile(`src="(/js/app-[A-Z0-9]+\.js)"`).FindStringSubmatch(get(h, "/").Body.String())
+	site := app(t, false, `<script src="{{bundle "app.js"}}"></script>`, bundle.New(bundle.Options{Entries: []string{"app.ts"}}),
+		collagetest.WithPluginConfig(bundle.Name, string(conf)))
+	m := regexp.MustCompile(`src="(/js/app-[A-Z0-9]+\.js)"`).FindStringSubmatch(site.Get("/").Body)
 	if m == nil {
 		t.Fatal("the script is not under the configured prefix")
 	}
-	body := get(h, m[1]).Body.String()
+	body := site.Get(m[1]).Body
 	if !strings.Contains(body, "long_name_here") || !strings.Contains(body, "var ") {
-		t.Errorf("minify off and es2015 were not applied: %q", body)
+		t.Errorf("minify never and es2015 were not applied: %q", body)
 	}
+}
+
+// "always" turns on in production what is otherwise development's: a source map
+// is written and linked, and the output is minified in development.
+func TestModesAlways(t *testing.T) {
+	dir := sources(t, map[string]string{"app.ts": "const long_name_here: number = 1\nconsole.log(long_name_here)\n"})
+	prod := app(t, false, `<script src="{{bundle "app.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}, Sourcemap: "always"}))
+	body := prod.Get(links(t, prod.Get("/").Body)[0]).Body
+	if !strings.Contains(body, "sourceMappingURL=") {
+		t.Errorf("sourcemap always wrote no map in production: %q", body)
+	}
+	dev := app(t, true, `<script src="{{bundle "app.js"}}"></script>`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}, Minify: "always", Sourcemap: "never"}))
+	body = dev.Get(links(t, dev.Get("/").Body)[0]).Body
+	if strings.Contains(body, "long_name_here") || strings.Contains(body, "sourceMappingURL=") {
+		t.Errorf("minify always / sourcemap never were not applied in development: %q", body)
+	}
+}
+
+// minify and sourcemap were booleans before v0.2.0; a boolean now stops the
+// application, naming the key.
+func TestBooleanModesFail(t *testing.T) {
+	dir := sources(t, map[string]string{"app.ts": "console.log(1)\n"})
+	for _, key := range []string{"minify", "sourcemap"} {
+		t.Run(key, func(t *testing.T) {
+			_, err := collagetest.TrySite(t, append(siteOptions(false, `x`, bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.ts"}})),
+				collagetest.WithPluginConfig(bundle.Name, `{"`+key+`": true}`))...)
+			if err == nil || !strings.Contains(err.Error(), key) {
+				t.Errorf("start = %v, want an error naming %s", err, key)
+			}
+		})
+	}
+}
+
+// A prefix is accepted with or without its trailing slash.
+func TestPrefixWithoutTrailingSlash(t *testing.T) {
+	dir := sources(t, map[string]string{"app.js": "console.log(1)\n"})
+	site := collagetest.NewSite(t,
+		collagetest.WithPlugins(bundle.New(bundle.Options{Dir: dir, Entries: []string{"app.js"}, Prefix: "/js"})),
+		collagetest.WithTemplates(map[string]string{"home.html": `<script src="{{bundle "app.js"}}"></script>`}),
+	)
+	m := regexp.MustCompile(`src="(/js/app-[A-Z0-9]+\.js)"`).FindStringSubmatch(site.Get("/").Body)
+	if m == nil {
+		t.Fatal("the script is not under /js/")
+	}
+	site.Get(m[1]).WantStatus(http.StatusOK)
 }

@@ -18,7 +18,7 @@ app, err := collage.New(&collage.Config{
 <script src="{{bundle "app.js"}}" defer></script>
 ```
 
-Requires collage v0.50.0 or later. Register it in `Config.Plugins`: it adds a
+Requires collage v0.61.0 or later. Register it in `Config.Plugins`: it adds a
 template function, which only a plugin registered there can.
 
 ## What it does
@@ -77,15 +77,16 @@ browser's developer tools show the sources as written.
 | --- | --- | --- |
 | `Dir` | required | The directory the sources are in, relative to the working directory |
 | `Entries` | required | The files to bundle, relative to `Dir`: `.js`, `.mjs`, `.jsx`, `.ts`, `.tsx`, `.css` and the like |
-| `Prefix` | `/_bundle/` | The URL prefix the output is served under |
-| `Minify` | on, off in development | Minify whitespace, identifiers and syntax |
-| `Sourcemap` | on in development only | Write and link a source map beside each output |
+| `Prefix` | `/_bundle/` | The URL prefix the output is served under; the trailing `/` is optional |
+| `Minify` | `""`: outside development only | When to minify whitespace, identifiers and syntax: `""`, `"always"` or `"never"` |
+| `Sourcemap` | `""`: in development only | When to write and link a source map beside each output: `""`, `"always"` or `"never"` |
 | `Target` | `esnext` | The language level the output must run on: `es2015` to `es2025`, `esnext` |
 
 Startup is refused for a `Dir` that is not a directory, an entry that is not a
 file in it or escapes it, an entry that is not a script or a stylesheet, two
-entries that would produce one name (`app.ts` and `app.js`), an unknown `Target`,
-and a `Prefix` that does not begin and end with `/`.
+entries that would produce one name (`app.ts` and `app.js`), an unknown `Target`
+or `Minify`/`Sourcemap` mode, and a `Prefix` that does not begin with `/` or is
+`/` alone.
 
 ## Configuration
 
@@ -95,8 +96,8 @@ and a `Prefix` that does not begin and end with `/`.
     "dir": "assets",
     "entries": ["app.ts", "app.css"],
     "prefix": "/_bundle/",
-    "minify": true,
-    "sourcemap": false,
+    "minify": "always",
+    "sourcemap": "never",
     "target": "es2020"
   }
 }
@@ -113,9 +114,20 @@ and a `Prefix` that does not begin and end with `/`.
   splitting, so one entry is one script.
 - **No esbuild plugins, no `tsconfig` paths beyond what esbuild reads itself, no
   PostCSS.** What esbuild does on its own is what is done.
-- **Source maps are public when they are on.** In production, turning `Sourcemap`
-  on serves the sources to anyone who asks.
+- **Source maps are public when they are on.** In production, `"sourcemap": "always"`
+  serves the sources to anyone who asks.
 - **A rebuild in development checks on request.** Nothing watches the directory
   between requests; collage's reload script, reading the mount every few hundred
   milliseconds while a page is open, is what makes an edit visible without a
   manual reload.
+
+## Changed in v0.2.0
+
+| Was | Now |
+| --- | --- |
+| `minify: true` / `false` (`Options.Minify *bool`) | `minify: "always"` / `"never"` (`Options.Minify string`); leave it out for the default |
+| `sourcemap: true` / `false` (`Options.Sourcemap *bool`) | `sourcemap: "always"` / `"never"` (`Options.Sourcemap string`) |
+| `prefix` had to end in `/` | the trailing `/` is optional |
+
+A boolean `minify` or `sourcemap` now stops the application at start, naming the
+key.

@@ -3,6 +3,7 @@
   "name": "elagoht/bundle",
   "description": "A collage plugin that bundles an application's JavaScript, TypeScript and CSS with esbuild, and serves the output under content-hashed names.",
   "repository": "https://github.com/Elagoht/collage-bundle",
+  "setup": "Nothing is bundled until the sources are named: set `\"dir\"` (the directory the sources are in) and `\"entries\"` (the files to bundle, relative to it) in this plugin's section of `plugins-config.json`; without them the application does not start.",
   "templateFunctions": [
     {
       "name": "bundle",
@@ -37,16 +38,16 @@
         }
       },
       "minify": {
-        "type": "boolean",
-        "description": "Minify minifies the output. Default: on, except in development."
+        "type": "string",
+        "description": "Minify is when the output is minified: \"\" (the default) outside development only, \"always\", or \"never\"."
       },
       "prefix": {
         "type": "string",
-        "description": "Prefix is the URL prefix the output is served under. Default \"/_bundle/\"."
+        "description": "Prefix is the URL prefix the output is served under, with or without its trailing slash. Default \"/_bundle/\"."
       },
       "sourcemap": {
-        "type": "boolean",
-        "description": "Sourcemap writes a source map beside each script and stylesheet, and links it. Default: on in development only."
+        "type": "string",
+        "description": "Sourcemap is when a source map is written beside each script and stylesheet, and linked: \"\" (the default) in development only, \"always\", or \"never\"."
       },
       "target": {
         "type": "string",
